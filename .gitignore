@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+workspace.xml
+
+# UV
+.uv/
+
+# Claude / IDE
+.claude/
+uv_project/claude-*-cwd/
+.vscode/
+.idea/
+
+# Obsidian
+AI_Employee_Vault/.obsidian/workspace.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+uv_project/credentials.json
+uv_project/gmail_token.json
+uv_project/x_session.json
+
+# Logs
+*.log

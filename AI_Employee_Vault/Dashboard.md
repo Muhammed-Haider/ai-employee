@@ -1,0 +1,10 @@
+- New file received: test4.txt
+- New file received: test4.txt
+- New file received: test4.md
+- New file received: text.txt
+- [Note] test4.md: Unable to analyze - CCR not responding (Priority: medium)
+- [Note] test4.md: Unable to analyze - CCR not responding (Priority: medium)
+- [Note] test5.md: Unable to analyze - CCR not responding (Priority: medium)
+- [Note] test_verify.md: Empty template file with JSON response instructions (Priority: low)
+- [Note] test_fix.md: Empty file containing only analysis instructions with no content to analyze (Priority: low)
+- [Note] test11.md: Empty file containing only analysis instructions (Priority: low)

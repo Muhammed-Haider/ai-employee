@@ -1,0 +1,22 @@
+[project]
+name = "uv-skills-project"
+version = "0.1.0"
+description = "A project with skills implementation"
+authors = [
+    {name = "Developer", email = "dev@example.com"}
+]
+dependencies = [
+    "anthropic>=0.72.0",
+    "google-api-python-client>=2.188.0",
+    "google-auth-httplib2>=0.3.0",
+    "google-auth-oauthlib>=1.2.3",
+    "watchdog>=4.0.2",
+]
+requires-python = ">=3.8"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+# UV specific configuration

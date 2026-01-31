@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: uv-skills-project
+Version: 0.1.0
+Summary: A project with skills implementation
+Author-email: Developer <dev@example.com>
+Requires-Python: >=3.8
+Requires-Dist: anthropic>=0.72.0
+Requires-Dist: google-api-python-client>=2.188.0
+Requires-Dist: google-auth-httplib2>=0.3.0
+Requires-Dist: google-auth-oauthlib>=1.2.3
+Requires-Dist: watchdog>=4.0.2
