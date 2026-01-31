@@ -1,0 +1,8 @@
+pyproject.toml
+src/uv_skills/__init__.py
+src/uv_skills/main.py
+src/uv_skills_project.egg-info/PKG-INFO
+src/uv_skills_project.egg-info/SOURCES.txt
+src/uv_skills_project.egg-info/dependency_links.txt
+src/uv_skills_project.egg-info/requires.txt
+src/uv_skills_project.egg-info/top_level.txt

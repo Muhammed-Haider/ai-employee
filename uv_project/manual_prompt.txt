@@ -1,0 +1,1 @@
+Please use your Gmail MCP tool to send an email. Recipient: iamhaider072@gmail.com. Subject: Manual Test. Body: This is a manual test of CCR.
