@@ -4,22 +4,21 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 VAULT = Path("../AI_Employee_Vault")
-NEEDS_ACTION = VAULT / "Needs_Action"
+INBOX = VAULT / "Inbox"
 
 class GmailWatcher:
     def __init__(self, creds_path):
         self.creds = Credentials.from_authorized_user_file(creds_path)
         self.service = build("gmail", "v1", credentials=self.creds)
-        self.seen = set()
 
     def poll(self):
         res = self.service.users().messages().list(
-            userId="me", q="is:unread", maxResults=5
+            userId="me", q="is:unread", maxResults=3
         ).execute()
         return res.get("messages", [])
 
     def run(self):
-        NEEDS_ACTION.mkdir(exist_ok=True)
+        INBOX.mkdir(exist_ok=True)
         print("Watcher started. Checking for unread emails every 120 seconds...")
         while True:
             messages = self.poll()
@@ -27,9 +26,6 @@ class GmailWatcher:
                 print("No new unread emails found.")
             
             for msg in messages:
-                if msg["id"] in self.seen:
-                    continue
-
                 print(f"New email found! ID: {msg['id']}")
                 data = self.service.users().messages().get(
                     userId="me", id=msg["id"]
@@ -50,10 +46,11 @@ status: new
 
 {data.get('snippet')}
 """
-                path = NEEDS_ACTION / f"EMAIL_{msg['id']}.md"
+                path = INBOX / f"EMAIL_{msg['id']}.md"
                 path.write_text(content, encoding="utf-8")
                 print(f"Saved email to {path.name}")
-                self.seen.add(msg["id"])
+                self.service.users().messages().modify(userId='me', id=msg['id'], body={'removeLabelIds': ['UNREAD']}).execute()
+                print(f"Marked email {msg['id']} as read.")
 
             time.sleep(120)
 
