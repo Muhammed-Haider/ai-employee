@@ -46,3 +46,8 @@ uv_project/x_session.json
 
 # Logs
 *.log
+
+# Runtime artifacts
+AI_Employee_Vault/Inbox/*
+AI_Employee_Vault/Needs_Action/*
+AI_Employee_Vault/Done/*
