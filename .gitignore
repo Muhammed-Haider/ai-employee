@@ -43,11 +43,15 @@ Thumbs.db
 uv_project/credentials.json
 uv_project/gmail_token.json
 uv_project/x_session.json
+linkedin_session.json
 
 # Logs
 *.log
+*debug*.html
+*debug*.png
 
 # Runtime artifacts
 AI_Employee_Vault/Inbox/*
 AI_Employee_Vault/Needs_Action/*
 AI_Employee_Vault/Done/*
+uv_project/linkedin_seen.json
