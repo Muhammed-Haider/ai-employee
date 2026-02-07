@@ -7,7 +7,8 @@ from agent_skills.file_skills.write_md import write_md
 from agent_skills.ai_skills.send_email_direct import send_email_direct
 
 VAULT = Path("../AI_Employee_Vault")
-EMAIL_FILE = VAULT / "send_email.md"
+DRAFTS_PATH = VAULT / "Drafts"
+DONE_PATH = VAULT / "Done"
 
 def parse_email_file(content: str):
     # Extract metadata using regex
@@ -28,36 +29,37 @@ def parse_email_file(content: str):
     return metadata.get("status"), metadata.get("recipient"), metadata.get("subject"), body
 
 def run_sender():
-    print(f"Sender loop started. Monitoring {EMAIL_FILE.absolute()} every 10s...", flush=True)
+    print(f"Sender loop started. Monitoring {DRAFTS_PATH.absolute()} for approved drafts every 10s...", flush=True)
     
     while True:
-        if not EMAIL_FILE.exists():
-            print(f"DEBUG: {EMAIL_FILE.absolute()} not found. Retrying...", flush=True)
-            time.sleep(10)
-            continue
+        # Ensure directories exist
+        DRAFTS_PATH.mkdir(exist_ok=True)
+        DONE_PATH.mkdir(exist_ok=True)
 
-        try:
-            print(f"DEBUG: Reading {EMAIL_FILE.absolute()}...", flush=True)
-            content = read_md(EMAIL_FILE)
-            status, recipient, subject, body = parse_email_file(content)
-            print(f"DEBUG: Status: {status}, Recipient: {recipient}", flush=True)
+        for draft_path in DRAFTS_PATH.glob("DRAFT_EMAIL_*.md"):
+            try:
+                content = read_md(draft_path)
+                status, recipient, subject, body = parse_email_file(content)
+                print(f"DEBUG: Processing {draft_path.name} - Status: {status}, Recipient: {recipient}", flush=True)
 
-            if status == "send" and recipient and body:
-                print(f"[{time.strftime('%H:%M:%S')}] Detected request to send email to {recipient}", flush=True)
+                if status == "approved" and recipient and body:
+                    print(f"[{time.strftime('%H:%M:%S')}] Detected approved draft to send email to {recipient}", flush=True)
+                    
+                    success = send_email_direct(recipient, subject or "(No Subject)", body)
+                    
+                    if success:
+                        print(f"SUCCESS: Email sent to {recipient}", flush=True)
+                        # Move to Done folder
+                        draft_path.rename(DONE_PATH / draft_path.name)
+                        print(f"Archived draft: {draft_path.name}", flush=True)
+                    else:
+                        print(f"FAILED: Could not send email to {recipient}", flush=True)
+                        # Update status to failed
+                        new_content = content.replace("status: approved", "status: failed")
+                        write_md(draft_path, new_content)
                 
-                success = send_email_direct(recipient, subject or "(No Subject)", body)
-                
-                if success:
-                    print(f"SUCCESS: Email sent to {recipient}", flush=True)
-                    new_content = content.replace("status: send", "status: sent")
-                    write_md(EMAIL_FILE, new_content)
-                else:
-                    print(f"FAILED: Could not send email to {recipient}", flush=True)
-                    new_content = content.replace("status: send", "status: failed")
-                    write_md(EMAIL_FILE, new_content)
-            
-        except Exception as e:
-            print(f"ERROR: Loop encountered an error: {e}", flush=True)
+            except Exception as e:
+                print(f"ERROR: Loop encountered an error processing {draft_path.name}: {e}", flush=True)
 
         time.sleep(10)
 
