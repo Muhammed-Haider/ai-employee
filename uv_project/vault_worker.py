@@ -1,113 +1,134 @@
 import time
-import os
-import re
-import shutil
+import logging
 from pathlib import Path
-from datetime import datetime
-from agent_skills.file_skills.read_md import read_md
-from agent_skills.file_skills.write_md import write_md
-from agent_skills.ai_skills.send_email_direct import send_email_direct
-from agent_skills.ai_skills.generate_x_post import generate_x_post
-from agent_skills.browser_skills.post_to_x import post_to_x
+import yaml
+from agent_skills.ai_skills.draft_email import draft_email_from_plan
 
-VAULT = Path("../AI_Employee_Vault")
-INBOX = VAULT / "Inbox"
-DRAFTS = VAULT / "Drafts"
-ARCHIVE = VAULT / "Archive"
-EMAIL_FILE = VAULT / "send_email.md"
+# --- Logging Setup ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
-def parse_metadata(content: str):
-    meta_match = re.search(r'---\s*(.*?)\s*---', content, re.DOTALL)
-    if not meta_match:
-        return {}
-    metadata = {}
-    for line in meta_match.group(1).split('\n'):
-        if ':' in line:
-            key, val = line.split(':', 1)
-            metadata[key.strip().lower()] = val.strip()
-    return metadata
-
-def process_inbox():
-    """Checks Inbox for new items to turn into X drafts."""
-    for file in INBOX.glob("*.md"):
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Processing Inbox item: {file.name}")
-        content = read_md(file)
+class VaultWorker:
+    """
+    A worker that watches for approved plans in the vault and executes them.
+    """
+    def __init__(self, vault_path="../AI_Employee_Vault"):
+        self.vault_path = Path(vault_path)
+        self.needs_action_path = self.vault_path / "Needs_Action"
+        self.done_path = self.vault_path / "Done"
         
-        # Generate the 50-char post
-        post_text = generate_x_post(content)
-        
-        draft_content = f"""---
-status: pending
-type: x_post
-original_file: {file.name}
----
-{post_text}
-"""
-        draft_name = f"DRAFT_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
-        write_md(DRAFTS / draft_name, draft_content)
-        
-        # Move original to Archive
-        shutil.move(file, ARCHIVE / file.name)
-        print(f"SUCCESS: Draft created: {draft_name}")
+        self.dispatcher = {
+            "draft_email": self.handle_draft_email
+        }
 
-def process_drafts():
-    """Checks Drafts for approved X posts."""
-    for file in DRAFTS.glob("*.md"):
-        content = read_md(file)
-        metadata = parse_metadata(content)
-        
-        if metadata.get("status") == "approved":
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Detected approved X post in {file.name}")
-            
-            # Extract post text (after the second ---)
-            parts = content.split('---')
-            post_text = parts[2].strip() if len(parts) > 2 else ""
-            
-            if post_text:
-                result = post_to_x(post_text)
-                if result.get("success"):
-                    print(f"SUCCESS: Posted to X: {post_text}")
-                    # Move to Archive with result
-                    final_content = content + f"\n\n--- POSTED ---\nURL: {result.get('url', 'N/A')}\nTime: {result.get('timestamp')}"
-                    write_md(file, final_content)
-                    shutil.move(file, ARCHIVE / file.name)
-                else:
-                    print(f"FAILED: Could not post to X: {result.get('error')}")
-                    new_content = content.replace("status: approved", "status: failed")
-                    write_md(file, new_content)
+        # Ensure directories exist
+        self.needs_action_path.mkdir(exist_ok=True)
+        self.done_path.mkdir(exist_ok=True)
 
-def process_emails():
-    """Legacy support for the send_email.md file."""
-    if not EMAIL_FILE.exists():
-        return
-    
-    content = read_md(EMAIL_FILE)
-    metadata = parse_metadata(content)
-    
-    if metadata.get("status") == "send":
-        recipient = metadata.get("recipient")
-        subject = metadata.get("subject")
-        parts = content.split('---')
-        body = parts[2].strip() if len(parts) > 2 else ""
-        
-        if recipient and body:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Sending email to {recipient}")
-            success = send_email_direct(recipient, subject or "(No Subject)", body)
-            if success:
-                write_md(EMAIL_FILE, content.replace("status: send", "status: sent"))
-            else:
-                write_md(EMAIL_FILE, content.replace("status: send", "status: failed"))
+        logging.info("Vault Worker initialized.")
+        logging.info(f"Watching: {self.needs_action_path}")
 
-def run_worker():
-    print(f"Vault Worker started. Monitoring {VAULT.absolute()}...", flush=True)
-    while True:
+    def find_approved_plans(self):
+        """
+        Finds plan files in the Needs_Action directory that have been approved.
+        """
+        approved_plans = []
+        for plan_path in self.needs_action_path.glob("PLAN_*.md"):
+            try:
+                with open(plan_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    # A simple check for the status in the frontmatter
+                    if "status: approved" in content.split("---")[1]:
+                        approved_plans.append(plan_path)
+            except Exception as e:
+                logging.error(f"Error reading or parsing {plan_path}: {e}")
+        return approved_plans
+
+    def parse_plan(self, plan_path):
+        """
+        Parses a plan file to find the specified action.
+        """
         try:
-            process_inbox()
-            process_drafts()
-            process_emails()
+            with open(plan_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                for line in content.splitlines():
+                    if line.startswith("Action:"):
+                        action = line.split("Action:")[1].strip()
+                        return action, content
         except Exception as e:
-            print(f"ERROR: Worker encountered an error: {e}")
-        time.sleep(10)
+            logging.error(f"Error parsing plan {plan_path}: {e}")
+        return None, None
+
+    def handle_draft_email(self, plan_content):
+        """
+        Handles the draft_email action by calling the appropriate skill.
+        """
+        logging.info("Handling action: draft_email")
+        return draft_email_from_plan(plan_content)
+
+    def archive_completed_item(self, plan_path):
+        """
+        Moves the completed plan and its source file to the Done directory.
+        """
+        try:
+            # Derive source file name from plan file name
+            source_filename = plan_path.name.replace("PLAN_", "")
+            source_path = self.needs_action_path / source_filename
+
+            # Move plan file
+            plan_path.rename(self.done_path / plan_path.name)
+            logging.info(f"Archived plan: {plan_path.name}")
+
+            # Move source file if it exists
+            if source_path.exists():
+                source_path.rename(self.done_path / source_path.name)
+                logging.info(f"Archived source: {source_path.name}")
+            else:
+                logging.warning(f"Source file not found for {plan_path.name}, only archived plan.")
+
+        except Exception as e:
+            logging.error(f"Error during archiving of {plan_path.name}: {e}")
+
+    def run(self):
+        """
+        The main loop for the worker.
+        """
+        logging.info("Vault Worker started. Press Ctrl+C to stop.")
+        while True:
+            logging.info("Checking for approved plans...")
+            approved_plans = self.find_approved_plans()
+
+            if not approved_plans:
+                logging.info("No approved plans found.")
+            else:
+                logging.info(f"Found {len(approved_plans)} approved plans.")
+                for plan_path in approved_plans:
+                    logging.info(f"Processing {plan_path.name}")
+                    action, content = self.parse_plan(plan_path)
+
+                    if action:
+                        logging.info(f"Action found: {action}")
+                        handler = self.dispatcher.get(action)
+                        if handler:
+                            success = handler(content)
+                            if success:
+                                logging.info(f"Successfully executed action: {action}")
+                                self.archive_completed_item(plan_path)
+                            else:
+                                logging.error(f"Failed to execute action: {action}")
+                        else:
+                            logging.warning(f"No handler found for action: {action}")
+                    else:
+                        logging.warning(f"No action found in {plan_path.name}")
+
+            time.sleep(30) # Wait for 30 seconds before the next check
 
 if __name__ == "__main__":
-    run_worker()
+    try:
+        worker = VaultWorker()
+        worker.run()
+    except KeyboardInterrupt:
+        logging.info("\nVault Worker stopped by user.")
